@@ -101,10 +101,14 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.email}>{user?.email}</Text>
         {user?.phone && <Text style={styles.phone}>{user?.phone}</Text>}
         <View style={styles.ratingRow}>
-          <Text style={styles.ratingText}>
-            ⭐ {user?.average_rating || 0} ({user?.rating_count || 0} reviews)
-          </Text>
-        </View>
+  <Text style={styles.ratingText}>
+    ⭐ {user?.average_rating || 0} ({user?.rating_count || 0} reviews)
+  </Text>
+</View>
+<View style={styles.trustRow}>
+  <Text style={styles.trustScore}>🏆 Trust Score: {user?.trust_score || 0}/100</Text>
+  <Text style={styles.trustLevel}>{user?.trust_level || 'New Member'}</Text>
+</View>
         <TouchableOpacity
           style={styles.editProfileBtn}
           onPress={() => {
@@ -240,6 +244,9 @@ const styles = StyleSheet.create({
   phone: { color: '#fff', fontSize: 14, marginBottom: 8, opacity: 0.85 },
   ratingRow: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6, marginBottom: 12 },
   ratingText: { color: '#fff', fontSize: 14 },
+  trustRow: { marginTop: 8, alignItems: 'center' },
+trustScore: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+trustLevel: { color: '#ffe0cc', fontSize: 12, marginTop: 2 },
   editProfileBtn: { backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 20, paddingVertical: 8 },
   editProfileBtnText: { color: '#FF6600', fontWeight: 'bold', fontSize: 14 },
   section: { padding: 16 },
