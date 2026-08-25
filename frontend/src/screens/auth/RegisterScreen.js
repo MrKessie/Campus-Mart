@@ -13,7 +13,8 @@ export default function RegisterScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
 
   async function handleRegister() {
-    if (!name || !email || !password || !confirmPassword) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!name || !cleanEmail || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields.');
       return;
     }
@@ -21,7 +22,7 @@ export default function RegisterScreen({ navigation }) {
       Alert.alert('Error', 'Passwords do not match.');
       return;
     }
-    if (!email.endsWith('@uew.edu.gh')) {
+    if (!cleanEmail.endsWith('@uew.edu.gh')) {
       Alert.alert('Error', 'Only UEW student emails (@uew.edu.gh) are allowed.');
       return;
     }
@@ -29,7 +30,7 @@ export default function RegisterScreen({ navigation }) {
     try {
       await api.post('/register', {
         name,
-        email,
+        email: cleanEmail,
         password,
         password_confirmation: confirmPassword,
       });
@@ -39,7 +40,12 @@ export default function RegisterScreen({ navigation }) {
         [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
       );
     } catch (error) {
-      Alert.alert('Registration Failed', error.response?.data?.message || 'Something went wrong.');
+      const errorMsg =
+        error.response?.data?.message ||
+        (error.response?.data?.errors && Object.values(error.response.data.errors).flat().join('\n')) ||
+        error.message ||
+        'Something went wrong.';
+      Alert.alert('Registration Failed', errorMsg);
     } finally {
       setLoading(false);
     }

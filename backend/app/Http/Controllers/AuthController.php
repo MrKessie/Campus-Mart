@@ -9,6 +9,10 @@ use Illuminate\Validation\ValidationException;
 class AuthController extends Controller {
 
     public function register(Request $request) {
+        $request->merge([
+            'email' => strtolower(trim($request->email ?? ''))
+        ]);
+
         $request->validate([
             'name'     => 'required|string|max:255',
             'email'    => [
@@ -39,7 +43,8 @@ class AuthController extends Controller {
             'password' => 'required',
         ]);
 
-        $user = User::where('email', $request->email)->first();
+        $email = strtolower(trim($request->email));
+        $user = User::where('email', $email)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([

@@ -1,4 +1,6 @@
-<?phpuse App\Http\Controllers\RequestController;
+<?php
+
+use App\Http\Controllers\RequestController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoryController;

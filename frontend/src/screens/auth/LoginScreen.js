@@ -22,13 +22,19 @@ export default function LoginScreen({ navigation }) {
     }
     setLoading(true);
     setNotVerified(false);
+    const cleanEmail = email.trim().toLowerCase();
     try {
-      await login(email, password);
+      await login(cleanEmail, password);
     } catch (error) {
       if (error.response?.status === 403) {
         setNotVerified(true);
       } else {
-        Alert.alert('Login Failed', error.response?.data?.message || 'Something went wrong.');
+        const errorMsg =
+          error.response?.data?.message ||
+          (error.response?.data?.errors && Object.values(error.response.data.errors).flat().join('\n')) ||
+          error.message ||
+          'Something went wrong.';
+        Alert.alert('Login Failed', errorMsg);
       }
     } finally {
       setLoading(false);
