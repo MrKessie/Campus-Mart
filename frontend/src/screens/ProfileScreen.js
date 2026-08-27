@@ -1,70 +1,67 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ActivityIndicator, ScrollView, Alert, TextInput, Modal
+  ScrollView, Alert, TextInput, Modal, Switch
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import {
+  IconStarFilled, IconTrophy, IconPencil,
+  IconLogout, IconMoon, IconSun, IconBellRinging,
+  IconShieldCheck, IconCalendarEvent, IconTag, IconBox, IconChevronRight
+} from '@tabler/icons-react-native';
 
 export default function ProfileScreen({ navigation }) {
   const { user, logout, updateUser } = useAuth();
-  const [listings, setListings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [ratings, setRatings] = useState([]);
+  const { colors, isDark, toggleTheme } = useTheme();
   const [editModal, setEditModal] = useState(false);
   const [editName, setEditName] = useState(user?.name || '');
   const [editPhone, setEditPhone] = useState(user?.phone || '');
   const [savingProfile, setSavingProfile] = useState(false);
 
-  useEffect(() => {
-    fetchMyListings();
-    fetchMyRatings();
-  }, []);
+  const [stats, setStats] = useState({
+    listingsCount: 0,
+    pendingOffersCount: 0,
+    escrowsCount: 0,
+    appointmentsCount: 0,
+    searchesCount: 0,
+  });
 
-  async function fetchMyListings() {
+  useFocusEffect(
+    useCallback(() => {
+      fetchDashboardStats();
+    }, [])
+  );
+
+  async function fetchDashboardStats() {
     try {
-      const response = await api.get('/my-listings');
-      setListings(response.data.data || response.data);
-    } catch (error) {
-      console.log('Error fetching listings:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
+      const [listingsRes, offersRes, escrowsRes, appointmentsRes, searchesRes] = await Promise.all([
+        api.get('/my-listings'),
+        api.get('/my-offers'),
+        api.get('/my-escrows'),
+        api.get('/my-appointments'),
+        api.get('/saved-searches'),
+      ]);
 
-  async function fetchMyRatings() {
-    try {
-      const response = await api.get(`/users/${user.id}/ratings`);
-      setRatings(response.data.ratings?.data || []);
-    } catch (error) {
-      console.log('Error fetching ratings:', error);
-    }
-  }
+      const listingsArr = listingsRes.data.data || listingsRes.data || [];
+      const sentPending = (offersRes.data.sent || []).filter(o => o.status === 'pending').length;
+      const receivedPending = (offersRes.data.received || []).filter(o => o.status === 'pending').length;
+      const escrowsArr = [...(escrowsRes.data.as_buyer || []), ...(escrowsRes.data.as_seller || [])];
+      const appointmentsArr = [...(appointmentsRes.data.as_client || []), ...(appointmentsRes.data.as_provider || [])];
+      const searchesArr = searchesRes.data || [];
 
-  async function toggleStatus(listing) {
-    try {
-      await api.post(`/listings/${listing.id}/toggle-status`);
-      fetchMyListings();
-    } catch (error) {
-      Alert.alert('Error', 'Could not update listing status.');
+      setStats({
+        listingsCount: listingsArr.length,
+        pendingOffersCount: sentPending + receivedPending,
+        escrowsCount: escrowsArr.length,
+        appointmentsCount: appointmentsArr.length,
+        searchesCount: searchesArr.length,
+      });
+    } catch (e) {
+      console.log('Error fetching stats:', e);
     }
-  }
-
-  async function deleteListing(id) {
-    Alert.alert('Delete Listing', 'Are you sure you want to delete this listing?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          try {
-            await api.delete(`/listings/${id}`);
-            fetchMyListings();
-          } catch (error) {
-            Alert.alert('Error', 'Could not delete listing.');
-          }
-        }
-      }
-    ]);
   }
 
   async function saveProfile() {
@@ -78,7 +75,7 @@ export default function ProfileScreen({ navigation }) {
         name: editName,
         phone: editPhone,
       });
-     if (updateUser) await updateUser(response.data.user);
+      if (updateUser) await updateUser(response.data.user);
       Alert.alert('Success', 'Profile updated successfully!');
       setEditModal(false);
     } catch (error) {
@@ -89,9 +86,22 @@ export default function ProfileScreen({ navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.bg }]}>
+      {/* Profile Header Card */}
+      <View style={[styles.header, { backgroundColor: colors.headerBg }]}>
+        <View style={styles.topHeaderRow}>
+          <View style={styles.themeToggleRow}>
+            {isDark ? <IconMoon size={18} color="#FF6600" /> : <IconSun size={18} color="#fff" />}
+            <Text style={[styles.themeToggleText, { color: '#fff' }]}>Dark Mode</Text>
+            <Switch
+              value={isDark}
+              onValueChange={toggleTheme}
+              trackColor={{ false: 'rgba(255,255,255,0.4)', true: '#FF6600' }}
+              thumbColor={isDark ? '#fff' : '#f4f3f4'}
+            />
+          </View>
+        </View>
+
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
             {user?.name?.charAt(0).toUpperCase()}
@@ -100,15 +110,24 @@ export default function ProfileScreen({ navigation }) {
         <Text style={styles.name}>{user?.name}</Text>
         <Text style={styles.email}>{user?.email}</Text>
         {user?.phone && <Text style={styles.phone}>{user?.phone}</Text>}
+
         <View style={styles.ratingRow}>
-  <Text style={styles.ratingText}>
-    ⭐ {user?.average_rating || 0} ({user?.rating_count || 0} reviews)
-  </Text>
-</View>
-<View style={styles.trustRow}>
-  <Text style={styles.trustScore}>🏆 Trust Score: {user?.trust_score || 0}/100</Text>
-  <Text style={styles.trustLevel}>{user?.trust_level || 'New Member'}</Text>
-</View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <IconStarFilled size={16} color="#FFD700" />
+            <Text style={styles.ratingText}>
+              {user?.average_rating || 0} ({user?.rating_count || 0} reviews)
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.trustRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <IconTrophy size={16} color="#FFD700" />
+            <Text style={styles.trustScore}>Trust Score: {user?.trust_score || 50}/100</Text>
+          </View>
+          <Text style={styles.trustLevel}>{user?.trust_level || 'Member'}</Text>
+        </View>
+
         <TouchableOpacity
           style={styles.editProfileBtn}
           onPress={() => {
@@ -117,114 +136,151 @@ export default function ProfileScreen({ navigation }) {
             setEditModal(true);
           }}
         >
-          <Text style={styles.editProfileBtnText}>Edit Profile</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <IconPencil size={15} color="#FF6600" />
+            <Text style={styles.editProfileBtnText}>Edit Profile</Text>
+          </View>
         </TouchableOpacity>
       </View>
 
-      {/* My Listings */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>My Listings</Text>
-        {loading ? (
-          <ActivityIndicator color="#FF6600" />
-        ) : listings.length === 0 ? (
-          <Text style={styles.emptyText}>No listings yet.</Text>
-        ) : (
-          listings.map(item => (
-            <View key={item.id} style={styles.listingCard}>
-              <View style={styles.listingInfo}>
-                <Text style={styles.listingTitle} numberOfLines={1}>{item.title}</Text>
-                <Text style={styles.listingPrice}>GHC {item.price}</Text>
-                <View style={[styles.statusBadge,
-                  item.status === 'available' ? styles.statusAvailable : styles.statusSold]}>
-                  <Text style={styles.statusText}>{item.status}</Text>
-                </View>
-              </View>
-              <View style={styles.listingActions}>
-                <TouchableOpacity
-                  style={styles.editButton}
-                  onPress={() => navigation.navigate('EditListing', { listing: item })}
-                >
-                  <Text style={styles.editButtonText}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.toggleButton}
-                  onPress={() => toggleStatus(item)}
-                >
-                  <Text style={styles.toggleButtonText}>
-                    {item.status === 'available' ? 'Mark Sold' : 'Mark Available'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.deleteButton}
-                  onPress={() => deleteListing(item.id)}
-                >
-                  <Text style={styles.deleteButtonText}>Delete</Text>
-                </TouchableOpacity>
-              </View>
+      {/* Main Navigation Menu List */}
+      <View style={styles.menuSection}>
+        <Text style={[styles.menuSectionTitle, { color: colors.subText }]}>ACCOUNT DASHBOARD</Text>
+
+        <TouchableOpacity
+          style={[styles.menuItem, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
+          onPress={() => navigation.navigate('MyListings')}
+        >
+          <View style={styles.menuLeft}>
+            <View style={[styles.iconCircle, { backgroundColor: '#FFF1E6' }]}>
+              <IconBox size={20} color={colors.primary} />
             </View>
-          ))
-        )}
+            <View>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>My Listings</Text>
+              <Text style={[styles.menuSub, { color: colors.subTextLight }]}>{stats.listingsCount} posted items</Text>
+            </View>
+          </View>
+          <IconChevronRight size={20} color={colors.subTextLight} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.menuItem, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
+          onPress={() => navigation.navigate('PriceOffers')}
+        >
+          <View style={styles.menuLeft}>
+            <View style={[styles.iconCircle, { backgroundColor: '#fff3e0' }]}>
+              <IconTag size={20} color="#e65100" />
+            </View>
+            <View>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>Price Offers</Text>
+              <Text style={[styles.menuSub, { color: colors.subTextLight }]}>
+                {stats.pendingOffersCount > 0 ? `${stats.pendingOffersCount} pending offers` : 'Sent & received offers'}
+              </Text>
+            </View>
+          </View>
+          {stats.pendingOffersCount > 0 && (
+            <View style={styles.menuBadge}>
+              <Text style={styles.menuBadgeText}>{stats.pendingOffersCount}</Text>
+            </View>
+          )}
+          <IconChevronRight size={20} color={colors.subTextLight} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.menuItem, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
+          onPress={() => navigation.navigate('PaymentHistory')}
+        >
+          <View style={styles.menuLeft}>
+            <View style={[styles.iconCircle, { backgroundColor: '#e8f5e9' }]}>
+              <IconShieldCheck size={20} color="#2e7d32" />
+            </View>
+            <View>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>Payment & Escrow History</Text>
+              <Text style={[styles.menuSub, { color: colors.subTextLight }]}>{stats.escrowsCount} transactions</Text>
+            </View>
+          </View>
+          <IconChevronRight size={20} color={colors.subTextLight} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.menuItem, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
+          onPress={() => navigation.navigate('Appointments')}
+        >
+          <View style={styles.menuLeft}>
+            <View style={[styles.iconCircle, { backgroundColor: '#e3f2fd' }]}>
+              <IconCalendarEvent size={20} color="#1565c0" />
+            </View>
+            <View>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>Service Appointments</Text>
+              <Text style={[styles.menuSub, { color: colors.subTextLight }]}>{stats.appointmentsCount} bookings</Text>
+            </View>
+          </View>
+          <IconChevronRight size={20} color={colors.subTextLight} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.menuItem, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
+          onPress={() => navigation.navigate('SavedSearches')}
+        >
+          <View style={styles.menuLeft}>
+            <View style={[styles.iconCircle, { backgroundColor: '#f3e5f5' }]}>
+              <IconBellRinging size={20} color="#7b1fa2" />
+            </View>
+            <View>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>Search Alerts</Text>
+              <Text style={[styles.menuSub, { color: colors.subTextLight }]}>{stats.searchesCount} active alerts</Text>
+            </View>
+          </View>
+          <IconChevronRight size={20} color={colors.subTextLight} />
+        </TouchableOpacity>
       </View>
 
-      {/* Reviews */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Reviews Received</Text>
-        {ratings.length === 0 ? (
-          <Text style={styles.emptyText}>No reviews yet.</Text>
-        ) : (
-          ratings.map(item => (
-            <View key={item.id} style={styles.reviewCard}>
-              <Text style={styles.reviewStars}>{'⭐'.repeat(item.stars)}</Text>
-              <Text style={styles.reviewText}>{item.review || 'No comment'}</Text>
-              <Text style={styles.reviewAuthor}>— {item.buyer?.name}</Text>
-            </View>
-          ))
-        )}
-      </View>
-
-      <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-        <Text style={styles.logoutButtonText}>Logout</Text>
+      {/* Logout Button */}
+      <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
+        <IconLogout size={18} color="#fff" />
+        <Text style={styles.logoutBtnText}>Log Out</Text>
       </TouchableOpacity>
 
-      {/* Edit Profile Modal */}
-      <Modal visible={editModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Edit Profile</Text>
+      <View style={{ height: 40 }} />
 
-            <Text style={styles.modalLabel}>Full Name</Text>
+      {/* Edit Profile Modal */}
+      <Modal visible={editModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { backgroundColor: colors.cardBg }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Edit Profile</Text>
+
+            <Text style={[styles.inputLabel, { color: colors.subText }]}>Full Name</Text>
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={editName}
               onChangeText={setEditName}
-              placeholder="Your name"
+              placeholder="Enter your name"
+              placeholderTextColor={colors.subTextLight}
             />
 
-            <Text style={styles.modalLabel}>Phone Number</Text>
+            <Text style={[styles.inputLabel, { color: colors.subText }]}>Phone Number</Text>
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]}
               value={editPhone}
               onChangeText={setEditPhone}
-              placeholder="e.g. 0241234567"
+              placeholder="Enter phone number"
+              placeholderTextColor={colors.subTextLight}
               keyboardType="phone-pad"
             />
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={styles.cancelButton}
+                style={[styles.cancelBtn, { backgroundColor: colors.bg }]}
                 onPress={() => setEditModal(false)}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={{ color: colors.text }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.saveButton}
+                style={[styles.saveBtn, { backgroundColor: colors.primary }]}
                 onPress={saveProfile}
                 disabled={savingProfile}
               >
-                {savingProfile
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={styles.saveButtonText}>Save</Text>
-                }
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -235,52 +291,43 @@ export default function ProfileScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: '#FF6600', padding: 24, alignItems: 'center', paddingTop: 48 },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  avatarText: { fontSize: 36, fontWeight: 'bold', color: '#FF6600' },
-  name: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 4 },
-  email: { color: '#fff', fontSize: 14, marginBottom: 4, opacity: 0.85 },
-  phone: { color: '#fff', fontSize: 14, marginBottom: 8, opacity: 0.85 },
-  ratingRow: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6, marginBottom: 12 },
-  ratingText: { color: '#fff', fontSize: 14 },
-  trustRow: { marginTop: 8, alignItems: 'center' },
-trustScore: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-trustLevel: { color: '#ffe0cc', fontSize: 12, marginTop: 2 },
-  editProfileBtn: { backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 20, paddingVertical: 8 },
-  editProfileBtnText: { color: '#FF6600', fontWeight: 'bold', fontSize: 14 },
-  section: { padding: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 12 },
-  emptyText: { color: '#999', textAlign: 'center', padding: 16 },
-  listingCard: { backgroundColor: '#fff', borderRadius: 8, padding: 12, marginBottom: 8, elevation: 1 },
-  listingInfo: { marginBottom: 8 },
-  listingTitle: { fontWeight: 'bold', fontSize: 15, color: '#333' },
-  listingPrice: { color: '#FF6600', fontWeight: 'bold', marginTop: 2 },
-  statusBadge: { alignSelf: 'flex-start', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3, marginTop: 4 },
-  statusAvailable: { backgroundColor: '#e8f5e9' },
-  statusSold: { backgroundColor: '#ffebee' },
-  statusText: { fontSize: 12, fontWeight: 'bold', color: '#333' },
-  listingActions: { flexDirection: 'row', gap: 8 },
-  editButton: { flex: 1, backgroundColor: '#FFF1E6', borderRadius: 6, padding: 8, alignItems: 'center' },
-  editButtonText: { color: '#FF6600', fontSize: 12, fontWeight: 'bold' },
-  toggleButton: { flex: 1, backgroundColor: '#FF6600', borderRadius: 6, padding: 8, alignItems: 'center' },
-  toggleButtonText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  deleteButton: { flex: 1, backgroundColor: '#ffebee', borderRadius: 6, padding: 8, alignItems: 'center' },
-  deleteButtonText: { color: '#c62828', fontSize: 12, fontWeight: 'bold' },
-  reviewCard: { backgroundColor: '#fff', borderRadius: 8, padding: 12, marginBottom: 8, elevation: 1 },
-  reviewStars: { fontSize: 16, marginBottom: 4 },
-  reviewText: { color: '#555', fontSize: 14, marginBottom: 4 },
-  reviewAuthor: { color: '#999', fontSize: 13 },
-  logoutButton: { margin: 16, backgroundColor: '#c62828', borderRadius: 8, padding: 16, alignItems: 'center', marginBottom: 32 },
-  logoutButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  container: { flex: 1 },
+  header: { padding: 20, paddingTop: 44, alignItems: 'center' },
+  topHeaderRow: { width: '100%', flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 10 },
+  themeToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  themeToggleText: { fontSize: 12, fontWeight: 'bold' },
+  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginBottom: 10, elevation: 4 },
+  avatarText: { fontSize: 32, fontWeight: 'bold', color: '#FF6600' },
+  name: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
+  email: { fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+  phone: { fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+  ratingRow: { marginTop: 8 },
+  ratingText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  trustRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8, backgroundColor: 'rgba(0,0,0,0.2)', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  trustScore: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  trustLevel: { color: '#FFD700', fontSize: 12, fontWeight: 'bold' },
+  editProfileBtn: { marginTop: 12, backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16 },
+  editProfileBtnText: { color: '#FF6600', fontSize: 12, fontWeight: 'bold' },
+
+  menuSection: { padding: 16 },
+  menuSectionTitle: { fontSize: 11, fontWeight: 'bold', letterSpacing: 1, marginBottom: 12 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
+  menuLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  iconCircle: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  menuTitle: { fontSize: 15, fontWeight: 'bold' },
+  menuSub: { fontSize: 12, marginTop: 1 },
+  menuBadge: { backgroundColor: '#d32f2f', borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6, marginRight: 6 },
+  menuBadgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#d32f2f', marginHorizontal: 16, paddingVertical: 12, borderRadius: 10, marginTop: 10 },
+  logoutBtnText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalBox: { backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '85%' },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 16, textAlign: 'center' },
-  modalLabel: { fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 6 },
-  modalInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, fontSize: 15, marginBottom: 16 },
-  modalButtons: { flexDirection: 'row', gap: 10 },
-  cancelButton: { flex: 1, backgroundColor: '#f5f5f5', borderRadius: 8, padding: 14, alignItems: 'center' },
-  cancelButtonText: { color: '#333', fontWeight: 'bold' },
-  saveButton: { flex: 1, backgroundColor: '#FF6600', borderRadius: 8, padding: 14, alignItems: 'center' },
-  saveButtonText: { color: '#fff', fontWeight: 'bold' },
+  modalBox: { width: '85%', borderRadius: 16, padding: 20 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 16 },
+  inputLabel: { fontSize: 12, fontWeight: 'bold', marginBottom: 4 },
+  modalInput: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, marginBottom: 12 },
+  modalButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 8 },
+  cancelBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  saveBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
 });

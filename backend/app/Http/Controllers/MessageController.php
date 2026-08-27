@@ -8,12 +8,27 @@ use Illuminate\Http\Request;
 class MessageController extends Controller {
 
     public function index(Request $request, Conversation $conversation) {
-        if ($conversation->buyer_id !== $request->user()->id &&
-            $conversation->seller_id !== $request->user()->id) {
+        $user = $request->user();
+        if ($conversation->buyer_id !== $user->id &&
+            $conversation->seller_id !== $user->id) {
             return response()->json(['message' => 'Unauthorised.'], 403);
         }
 
-        $messages = $conversation->messages()->with('sender')->latest()->get()->reverse()->values();
+        // Mark incoming messages as read
+        $conversation->messages()
+            ->where('sender_id', '!=', $user->id)
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        $query = $conversation->messages()->with(['sender', 'replyTo']);
+
+        if ($user->id === $conversation->buyer_id) {
+            $query->where('deleted_for_buyer', false);
+        } else {
+            $query->where('deleted_for_seller', false);
+        }
+
+        $messages = $query->latest()->get()->reverse()->values();
 
         return response()->json($messages);
     }
@@ -25,15 +40,76 @@ class MessageController extends Controller {
         }
 
         $request->validate([
-            'body' => 'required|string|max:1000',
+            'body'                 => 'nullable|string|max:1000',
+            'image'                => 'nullable|image|max:4096',
+            'reply_to_message_id' => 'nullable|exists:messages,id',
         ]);
+
+        if (empty($request->body) && !$request->hasFile('image')) {
+            return response()->json(['message' => 'Message body or image is required.'], 422);
+        }
+
+        $imagePath = null;
+        if ($request->hasFile('image')) {
+            $imagePath = $request->file('image')->store('chat_images', 'public');
+        }
 
         $message = $conversation->messages()->create([
-            'sender_id' => $request->user()->id,
-            'body'      => $request->body,
+            'sender_id'           => $request->user()->id,
+            'body'                => $request->body ?? '',
+            'image'               => $imagePath,
+            'reply_to_message_id' => $request->reply_to_message_id,
         ]);
 
-        return response()->json($message->load('sender'), 201);
+        return response()->json($message->load(['sender', 'replyTo']), 201);
+    }
+
+    public function destroy(Request $request, Message $message) {
+        $user = $request->user();
+        $conversation = $message->conversation;
+
+        if ($conversation->buyer_id !== $user->id && $conversation->seller_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorised.'], 403);
+        }
+
+        $type = $request->input('type', 'me');
+
+        if ($type === 'everyone') {
+            if ($message->sender_id !== $user->id) {
+                return response()->json(['message' => 'You can only delete your own messages for everyone.'], 403);
+            }
+            $message->is_deleted_for_everyone = true;
+            $message->body = '';
+            $message->image = null;
+            $message->save();
+        } else {
+            if ($user->id === $conversation->buyer_id) {
+                $message->deleted_for_buyer = true;
+            } else {
+                $message->deleted_for_seller = true;
+            }
+            $message->save();
+        }
+
+        return response()->json(['message' => 'Message deleted.', 'message_data' => $message]);
+    }
+
+    public function react(Request $request, Message $message) {
+        $user = $request->user();
+        $conversation = $message->conversation;
+
+        if ($conversation->buyer_id !== $user->id && $conversation->seller_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorised.'], 403);
+        }
+
+        $request->validate([
+            'reaction' => 'nullable|string|max:10',
+        ]);
+
+        $message->reaction = $request->reaction;
+        $message->save();
+
+        return response()->json(['message' => 'Reaction updated.', 'message_data' => $message]);
     }
 
     public function unreadCount(Request $request) {

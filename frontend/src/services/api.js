@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = 'http://192.168.1.180:8000/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.180:8000/api';
 const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -27,5 +27,17 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export const BASE_URL = API_URL.replace(/\/api\/?$/, '');
+export const STORAGE_URL = `${BASE_URL}/storage`;
+
+export function getImageUrl(path) {
+  if (!path) return null;
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('file://')) {
+    return path;
+  }
+  const cleanPath = path.replace(/^\//, '');
+  return `${STORAGE_URL}/${cleanPath}`;
+}
 
 export default api;

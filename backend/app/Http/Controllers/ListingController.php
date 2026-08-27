@@ -38,19 +38,37 @@ class ListingController extends Controller {
             'title'       => 'required|string|max:150',
             'description' => 'required|string|max:2000',
             'price'       => 'required|numeric|min:0',
-            'image'       => 'required|image|max:4096',
+            'image'       => 'sometimes|image|max:4096',
+            'images'      => 'sometimes|array',
+            'images.*'    => 'image|max:4096',
             'is_service'  => 'sometimes|boolean',
+            'course_code' => 'nullable|string|max:20',
         ]);
 
-        $imagePath = $request->file('image')->store('listings', 'public');
+        $imagePaths = [];
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $imgFile) {
+                $imagePaths[] = $imgFile->store('listings', 'public');
+            }
+        }
+
+        $mainImage = !empty($imagePaths) ? $imagePaths[0] : null;
+        if ($request->hasFile('image')) {
+            $mainImage = $request->file('image')->store('listings', 'public');
+            if (empty($imagePaths)) {
+                $imagePaths[] = $mainImage;
+            }
+        }
 
         $listing = $request->user()->listings()->create([
             'category_id' => $request->category_id,
             'title'       => $request->title,
             'description' => $request->description,
             'price'       => $request->price,
-            'image'       => $imagePath,
+            'image'       => $mainImage,
+            'images'      => $imagePaths,
             'is_service'  => $request->boolean('is_service', false),
+            'course_code' => $request->course_code ? strtoupper(trim($request->course_code)) : null,
         ]);
 
         return response()->json([
@@ -60,7 +78,7 @@ class ListingController extends Controller {
     }
 
     public function show(Listing $listing) {
-        return response()->json($listing->load(['user', 'category', 'ratings.buyer']));
+        return response()->json($listing->load(['user', 'category', 'ratings.buyer', 'offers.buyer']));
     }
 
     public function update(Request $request, Listing $listing) {
@@ -74,12 +92,30 @@ class ListingController extends Controller {
             'description' => 'sometimes|string|max:2000',
             'price'       => 'sometimes|numeric|min:0',
             'image'       => 'sometimes|image|max:4096',
+            'images'      => 'sometimes|array',
+            'images.*'    => 'image|max:4096',
             'status'      => 'sometimes|in:available,sold',
+            'course_code' => 'nullable|string|max:20',
         ]);
 
-        if ($request->hasFile('image')) {
+        if ($request->hasFile('images')) {
+            $newImages = [];
+            foreach ($request->file('images') as $imgFile) {
+                $newImages[] = $imgFile->store('listings', 'public');
+            }
+            if (!empty($newImages)) {
+                $listing->images = $newImages;
+                $listing->image = $newImages[0];
+            }
+        } elseif ($request->hasFile('image')) {
             if ($listing->image) Storage::disk('public')->delete($listing->image);
-            $listing->image = $request->file('image')->store('listings', 'public');
+            $mainPath = $request->file('image')->store('listings', 'public');
+            $listing->image = $mainPath;
+            $listing->images = [$mainPath];
+        }
+
+        if ($request->has('course_code')) {
+            $listing->course_code = $request->course_code ? strtoupper(trim($request->course_code)) : null;
         }
 
         $listing->fill($request->only('category_id', 'title', 'description', 'price', 'status'));

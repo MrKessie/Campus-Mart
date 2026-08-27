@@ -9,7 +9,7 @@ class Listing extends Model {
 
     protected $fillable = [
         'user_id', 'category_id', 'title', 'description',
-        'price', 'image', 'images', 'status', 'is_service'
+        'price', 'image', 'images', 'status', 'is_service', 'course_code'
     ];
 
     protected $casts = [
@@ -30,6 +30,10 @@ class Listing extends Model {
         return $this->hasMany(Rating::class);
     }
 
+    public function offers() {
+        return $this->hasMany(Offer::class);
+    }
+
     public function scopeAvailable($query) {
         return $query->where('status', 'available');
     }
@@ -37,7 +41,8 @@ class Listing extends Model {
     public function scopeSearch($query, $term) {
         return $query->where(function($q) use ($term) {
             $q->where('title', 'like', "%{$term}%")
-              ->orWhere('description', 'like', "%{$term}%");
+              ->orWhere('description', 'like', "%{$term}%")
+              ->orWhere('course_code', 'like', "%{$term}%");
         });
     }
 }

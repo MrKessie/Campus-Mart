@@ -4,9 +4,12 @@ import {
   Image, ActivityIndicator, RefreshControl, Alert
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import api from '../services/api';
+import api, { getImageUrl } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
+import { IconPackage, IconTrash, IconBookmark } from '@tabler/icons-react-native';
 
 export default function WatchlistScreen({ navigation }) {
+  const { colors } = useTheme();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -41,28 +44,32 @@ export default function WatchlistScreen({ navigation }) {
   function renderItem({ item }) {
     return (
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
         onPress={() => navigation.navigate('ListingDetail', { listing: item })}
       >
         {item.image ? (
           <Image
-            source={{ uri: `http://10.204.39.81:8000/storage/${item.image}` }}
+            source={{ uri: getImageUrl(item.image) }}
             style={styles.cardImage}
           />
         ) : (
-          <View style={styles.noImage}>
-            <Text style={styles.noImageText}>No Image</Text>
+          <View style={[styles.noImage, { backgroundColor: colors.bg }]}>
+            <IconPackage size={32} color={colors.subTextLight} />
+            <Text style={[styles.noImageText, { color: colors.subTextLight }]}>No Image</Text>
           </View>
         )}
         <View style={styles.cardInfo}>
-          <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
-          <Text style={styles.cardPrice}>GHC {item.price}</Text>
-          <Text style={styles.cardCategory}>{item.category?.name}</Text>
+          <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>{item.title}</Text>
+          <Text style={[styles.cardPrice, { color: colors.primary }]}>GH₵ {item.price}</Text>
+          <Text style={[styles.cardCategory, { color: colors.subTextLight }]}>{item.category?.name}</Text>
           <TouchableOpacity
             style={styles.removeButton}
             onPress={() => removeFromWatchlist(item.id)}
           >
-            <Text style={styles.removeButtonText}>Remove</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+              <IconTrash size={12} color="#c62828" />
+              <Text style={styles.removeButtonText}>Remove</Text>
+            </View>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -70,24 +77,25 @@ export default function WatchlistScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      <View style={[styles.header, { backgroundColor: colors.headerBg }]}>
         <Text style={styles.headerTitle}>My Watchlist</Text>
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#FF6600" style={{ marginTop: 40 }} />
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={listings}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
           numColumns={2}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchWatchlist(); }} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchWatchlist(); }} colors={[colors.primary]} />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No saved listings yet.</Text>
-              <Text style={styles.emptySubText}>Tap the bookmark icon on any listing to save it.</Text>
+              <IconBookmark size={48} color={colors.subTextLight} style={{ marginBottom: 12 }} />
+              <Text style={[styles.emptyText, { color: colors.text }]}>No saved listings yet.</Text>
+              <Text style={[styles.emptySubText, { color: colors.subTextLight }]}>Tap the bookmark icon on any listing to save it.</Text>
             </View>
           }
           contentContainerStyle={styles.listContent}
@@ -98,21 +106,21 @@ export default function WatchlistScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: '#FF6600', padding: 16, paddingTop: 48 },
+  container: { flex: 1 },
+  header: { padding: 16, paddingTop: 44 },
   headerTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  card: { flex: 1, backgroundColor: '#fff', margin: 6, borderRadius: 8, overflow: 'hidden', elevation: 2 },
+  listContent: { padding: 8 },
+  card: { flex: 1, margin: 6, borderRadius: 8, overflow: 'hidden', elevation: 2, borderWidth: 1 },
   cardImage: { width: '100%', height: 120 },
-  noImage: { width: '100%', height: 120, backgroundColor: '#ddd', justifyContent: 'center', alignItems: 'center' },
-  noImageText: { color: '#999' },
-  cardInfo: { padding: 8 },
-  cardTitle: { fontWeight: 'bold', fontSize: 14, color: '#333' },
-  cardPrice: { color: '#FF6600', fontWeight: 'bold', marginTop: 4 },
-  cardCategory: { color: '#999', fontSize: 12, marginTop: 2 },
-  removeButton: { marginTop: 8, backgroundColor: '#ffebee', borderRadius: 6, padding: 6, alignItems: 'center' },
-  removeButtonText: { color: '#c62828', fontSize: 12, fontWeight: 'bold' },
-  listContent: { padding: 6 },
-  emptyContainer: { alignItems: 'center', marginTop: 60 },
-  emptyText: { color: '#999', fontSize: 16, fontWeight: 'bold' },
-  emptySubText: { color: '#bbb', fontSize: 13, marginTop: 8, textAlign: 'center', paddingHorizontal: 32 },
+  noImage: { width: '100%', height: 120, justifyContent: 'center', alignItems: 'center' },
+  noImageText: { fontSize: 12 },
+  cardInfo: { padding: 10 },
+  cardTitle: { fontWeight: 'bold', fontSize: 14, marginBottom: 4 },
+  cardPrice: { fontWeight: 'bold', fontSize: 14, marginBottom: 2 },
+  cardCategory: { fontSize: 12, marginBottom: 8 },
+  removeButton: { backgroundColor: '#ffebee', borderRadius: 4, paddingVertical: 4, alignItems: 'center' },
+  removeButtonText: { color: '#c62828', fontSize: 11, fontWeight: 'bold' },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 80, padding: 32 },
+  emptyText: { fontSize: 18, fontWeight: 'bold', marginBottom: 6 },
+  emptySubText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
 });

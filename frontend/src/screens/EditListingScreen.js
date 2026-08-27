@@ -4,13 +4,36 @@ import {
   Alert, ActivityIndicator, ScrollView, Image
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import api from '../services/api';
+import api, { getImageUrl } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
+import {
+  IconCamera, IconBook, IconDeviceMobile, IconShirt,
+  IconSoup, IconArmchair, IconPencil, IconSchool,
+  IconPalette, IconScissors, IconCar, IconBox
+} from '@tabler/icons-react-native';
+
+const CATEGORY_ICON_MAP = {
+  'Textbooks': IconBook,
+  'Electronics': IconDeviceMobile,
+  'Clothing': IconShirt,
+  'Food & Drinks': IconSoup,
+  'Furniture': IconArmchair,
+  'Stationery': IconPencil,
+  'Tutoring': IconSchool,
+  'Photography': IconCamera,
+  'Graphic Design': IconPalette,
+  'Hair & Beauty': IconScissors,
+  'Transport': IconCar,
+  'Other': IconBox,
+};
 
 export default function EditListingScreen({ route, navigation }) {
   const { listing } = route.params;
+  const { colors } = useTheme();
   const [title, setTitle] = useState(listing.title);
   const [description, setDescription] = useState(listing.description);
   const [price, setPrice] = useState(listing.price.toString());
+  const [courseCode, setCourseCode] = useState(listing.course_code || '');
   const [categoryId, setCategoryId] = useState(listing.category_id?.toString() || '');
   const [categories, setCategories] = useState([]);
   const [image, setImage] = useState(null);
@@ -52,6 +75,7 @@ export default function EditListingScreen({ route, navigation }) {
       formData.append('description', description);
       formData.append('price', price);
       formData.append('category_id', categoryId);
+      formData.append('course_code', courseCode.trim().toUpperCase());
       formData.append('_method', 'PUT');
 
       if (image) {
@@ -77,49 +101,62 @@ export default function EditListingScreen({ route, navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={[styles.container, { backgroundColor: colors.bg }]}>
       <View style={styles.inner}>
-        <Text style={styles.pageTitle}>Edit Listing</Text>
+        <Text style={[styles.pageTitle, { color: colors.text }]}>Edit Listing</Text>
 
-        <Text style={styles.label}>Title</Text>
-        <TextInput style={styles.input} value={title} onChangeText={setTitle} />
+        <Text style={[styles.label, { color: colors.text }]}>Title</Text>
+        <TextInput style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]} value={title} onChangeText={setTitle} />
 
-        <Text style={styles.label}>Description</Text>
-        <TextInput style={[styles.input, styles.textArea]} value={description} onChangeText={setDescription} multiline numberOfLines={4} />
+        <Text style={[styles.label, { color: colors.text }]}>Course Code (Optional)</Text>
+        <TextInput style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]} placeholder="e.g. EPS 111, ICT 232" placeholderTextColor={colors.subTextLight} value={courseCode} onChangeText={setCourseCode} autoCapitalize="characters" />
 
-        <Text style={styles.label}>Price (GHC)</Text>
-        <TextInput style={styles.input} value={price} onChangeText={setPrice} keyboardType="numeric" />
+        <Text style={[styles.label, { color: colors.text }]}>Description</Text>
+        <TextInput style={[styles.input, styles.textArea, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]} value={description} onChangeText={setDescription} multiline numberOfLines={4} />
 
-        <Text style={styles.label}>Category</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Price (GH₵)</Text>
+        <TextInput style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.border }]} value={price} onChangeText={setPrice} keyboardType="numeric" />
+
+        <Text style={[styles.label, { color: colors.text }]}>Category</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
-          {categories.map(cat => (
-            <TouchableOpacity
-              key={cat.id}
-              style={[styles.categoryChip, categoryId === cat.id.toString() && styles.categoryChipActive]}
-              onPress={() => setCategoryId(cat.id.toString())}
-            >
-              <Text style={[styles.categoryChipText, categoryId === cat.id.toString() && styles.categoryChipTextActive]}>
-                {cat.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {categories.map(cat => {
+            const IconComp = CATEGORY_ICON_MAP[cat.name] || IconBox;
+            const isSelected = categoryId === cat.id.toString();
+            return (
+              <TouchableOpacity
+                key={cat.id}
+                style={[
+                  styles.categoryChip,
+                  { backgroundColor: isSelected ? colors.primary : colors.cardBg, borderColor: isSelected ? colors.primary : colors.border }
+                ]}
+                onPress={() => setCategoryId(cat.id.toString())}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <IconComp size={16} color={isSelected ? '#fff' : colors.text} />
+                  <Text style={[styles.categoryChipText, { color: isSelected ? '#fff' : colors.text }]}>
+                    {cat.name}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
 
-        <Text style={styles.label}>Image</Text>
-        <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
+        <Text style={[styles.label, { color: colors.text }]}>Image</Text>
+        <TouchableOpacity style={[styles.imagePicker, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={pickImage}>
           {image ? (
             <Image source={{ uri: image.uri }} style={styles.previewImage} />
           ) : listing.image ? (
-            <Image source={{ uri: `http://10.204.39.81:8000/storage/${listing.image}` }} style={styles.previewImage} />
+            <Image source={{ uri: getImageUrl(listing.image) }} style={styles.previewImage} />
           ) : (
-            <Text style={styles.imagePickerText}>Tap to select image</Text>
+            <View style={{ alignItems: 'center', gap: 6 }}>
+              <IconCamera size={28} color={colors.subTextLight} />
+              <Text style={[styles.imagePickerText, { color: colors.subTextLight }]}>Tap to select image</Text>
+            </View>
           )}
         </TouchableOpacity>
-        {listing.image && !image && (
-          <Text style={styles.imageNote}>Current image shown. Tap above to change it.</Text>
-        )}
 
-        <TouchableOpacity style={styles.button} onPress={handleSubmit} disabled={loading}>
+        <TouchableOpacity style={[styles.button, { backgroundColor: colors.primary }]} onPress={handleSubmit} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Save Changes</Text>}
         </TouchableOpacity>
       </View>
