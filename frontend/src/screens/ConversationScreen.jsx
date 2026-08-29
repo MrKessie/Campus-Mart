@@ -7,9 +7,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Haptics from 'expo-haptics';
 import api, { getImageUrl } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { getEcho } from '../services/echo';
 import { sendLocalNotification } from '../services/notificationService';
 import {
   IconSend, IconShieldCheck, IconMapPin, IconX,
@@ -82,8 +84,10 @@ export default function ConversationScreen({ route }) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [zoneModal, setZoneModal] = useState(false);
+  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const flatListRef = useRef(null);
   const previousMessageCount = useRef(0);
+  const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
     checkEscrowStatus();
@@ -131,9 +135,70 @@ export default function ConversationScreen({ route }) {
 
   useEffect(() => {
     fetchMessages();
-    const interval = setInterval(fetchMessages, 5000);
-    return () => clearInterval(interval);
-  }, []);
+
+    let channel;
+    try {
+      const echo = getEcho();
+      channel = echo.private(`conversation.${conversationData.id}`);
+
+      channel.listen('.MessageSent', (e) => {
+        const incomingMsg = e.message;
+        if (incomingMsg) {
+          setMessages(prev => {
+            if (prev.some(m => m.id === incomingMsg.id)) return prev;
+            return [...prev, incomingMsg];
+          });
+          if (incomingMsg.sender_id !== user?.id) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }
+      });
+
+      channel.listen('.MessageDeleted', (e) => {
+        setMessages(prev =>
+          prev.map(m => (m.id === e.message_id ? { ...m, is_deleted_for_everyone: true, body: '', image: null } : m))
+        );
+      });
+
+      channel.listen('.MessageReacted', (e) => {
+        setMessages(prev =>
+          prev.map(m => (m.id === e.message_id ? { ...m, reaction: e.reaction } : m))
+        );
+      });
+
+      channel.listenForWhisper('typing', (e) => {
+        if (e.userId !== user?.id) {
+          setIsPartnerTyping(Boolean(e.isTyping));
+          if (e.isTyping) {
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = setTimeout(() => {
+              setIsPartnerTyping(false);
+            }, 3000);
+          }
+        }
+      });
+    } catch (err) {
+      console.log('Echo connection error:', err);
+    }
+
+    // Heartbeat fallback polling
+    const interval = setInterval(fetchMessages, 15000);
+
+    return () => {
+      clearInterval(interval);
+      if (channel) {
+        channel.stopListening('.MessageSent');
+        channel.stopListening('.MessageDeleted');
+        channel.stopListening('.MessageReacted');
+      }
+      try {
+        getEcho().leave(`conversation.${conversationData.id}`);
+      } catch (e) {}
+    };
+  }, [conversationData.id]);
 
   async function fetchMessages() {
     try {
@@ -166,6 +231,17 @@ export default function ConversationScreen({ route }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleTextChange(text) {
+    setNewMessage(text);
+    try {
+      const echo = getEcho();
+      echo.private(`conversation.${conversationData.id}`).whisper('typing', {
+        userId: user?.id,
+        isTyping: text.length > 0,
+      });
+    } catch (e) {}
   }
 
   async function pickAttachment() {
@@ -408,14 +484,23 @@ export default function ConversationScreen({ route }) {
         >
           <IconArrowLeft size={24} color="#fff" />
         </TouchableOpacity>
-        <View style={{ flex: 1 }}>
+        <TouchableOpacity
+          style={{ flex: 1 }}
+          onPress={() => {
+            const partner = conversationData.buyer_id === user?.id ? conversationData.seller : conversationData.buyer;
+            const partnerId = conversationData.buyer_id === user?.id ? conversationData.seller_id : conversationData.buyer_id;
+            if (partnerId) {
+              navigation.navigate('SellerProfile', { seller: partner, sellerId: partnerId });
+            }
+          }}
+        >
           <Text style={styles.headerTitle} numberOfLines={1}>{conversationData.listing?.title}</Text>
           <Text style={styles.headerSubtitle}>
             {conversationData.buyer_id === user?.id
-              ? `Seller: ${conversationData.seller?.name}`
-              : `Buyer: ${conversationData.buyer?.name}`}
+              ? `Seller: ${conversationData.seller?.name || 'User'}  ›`
+              : `Buyer: ${conversationData.buyer?.name || 'User'}  ›`}
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       <TouchableOpacity
@@ -503,6 +588,16 @@ export default function ConversationScreen({ route }) {
         </View>
       )}
 
+      {isPartnerTyping && (
+        <View style={[styles.typingIndicatorRow, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+          <Text style={[styles.typingIndicatorText, { color: colors.subTextLight }]}>
+            {conversationData.buyer_id === user?.id
+              ? `${conversationData.seller?.name || 'Seller'} is typing...`
+              : `${conversationData.buyer?.name || 'Buyer'} is typing...`}
+          </Text>
+        </View>
+      )}
+
       <View
         style={[
           styles.inputRow,
@@ -521,7 +616,7 @@ export default function ConversationScreen({ route }) {
           placeholder="Type a message..."
           placeholderTextColor={colors.subTextLight}
           value={newMessage}
-          onChangeText={setNewMessage}
+          onChangeText={handleTextChange}
           multiline
         />
         <TouchableOpacity style={[styles.sendButton, { backgroundColor: colors.primary }]} onPress={sendMessage} disabled={sending}>
@@ -719,4 +814,6 @@ const styles = StyleSheet.create({
   fullScreenOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
   closePreviewBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20 },
   fullScreenImage: { width: '100%', height: '80%' },
+  typingIndicatorRow: { paddingHorizontal: 16, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth },
+  typingIndicatorText: { fontSize: 12, fontStyle: 'italic' },
 });

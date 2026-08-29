@@ -3,6 +3,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Events\MessageSent;
+use App\Events\MessageDeleted;
+use App\Events\MessageReacted;
 use Illuminate\Http\Request;
 
 class MessageController extends Controller {
@@ -61,7 +64,16 @@ class MessageController extends Controller {
             'reply_to_message_id' => $request->reply_to_message_id,
         ]);
 
-        return response()->json($message->load(['sender', 'replyTo']), 201);
+        $loadedMessage = $message->load(['sender', 'replyTo']);
+
+        // Broadcast real-time message event to channel
+        try {
+            broadcast(new MessageSent($loadedMessage))->toOthers();
+        } catch (\Throwable $e) {
+            \Log::warning('Broadcast MessageSent failed: ' . $e->getMessage());
+        }
+
+        return response()->json($loadedMessage, 201);
     }
 
     public function destroy(Request $request, Message $message) {
@@ -82,6 +94,12 @@ class MessageController extends Controller {
             $message->body = '';
             $message->image = null;
             $message->save();
+
+            try {
+                broadcast(new MessageDeleted($message))->toOthers();
+            } catch (\Throwable $e) {
+                \Log::warning('Broadcast MessageDeleted failed: ' . $e->getMessage());
+            }
         } else {
             if ($user->id === $conversation->buyer_id) {
                 $message->deleted_for_buyer = true;
@@ -108,6 +126,12 @@ class MessageController extends Controller {
 
         $message->reaction = $request->reaction;
         $message->save();
+
+        try {
+            broadcast(new MessageReacted($message))->toOthers();
+        } catch (\Throwable $e) {
+            \Log::warning('Broadcast MessageReacted failed: ' . $e->getMessage());
+        }
 
         return response()->json(['message' => 'Reaction updated.', 'message_data' => $message]);
     }

@@ -4,8 +4,10 @@ import {
   ActivityIndicator, Alert, RefreshControl
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Haptics from 'expo-haptics';
 import api from '../services/api';
 import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import { IconBellRinging, IconTrash } from '@tabler/icons-react-native';
 
 export default function SavedSearchesScreen({ navigation }) {
@@ -13,6 +15,7 @@ export default function SavedSearchesScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { colors } = useTheme();
+  const { showToast } = useToast();
 
   useFocusEffect(
     useCallback(() => {
@@ -38,12 +41,13 @@ export default function SavedSearchesScreen({ navigation }) {
   }
 
   async function deleteSavedSearch(id) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await api.delete(`/saved-searches/${id}`);
       setSavedSearches(prev => prev.filter(s => s.id !== id));
-      Alert.alert('Deleted', 'Search alert removed.');
+      showToast('Search alert removed', 'info');
     } catch (error) {
-      Alert.alert('Error', 'Could not delete search alert.');
+      showToast('Could not delete search alert.', 'error');
     }
   }
 

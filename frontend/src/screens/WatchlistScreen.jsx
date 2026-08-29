@@ -4,40 +4,77 @@ import {
   Image, ActivityIndicator, RefreshControl, Alert
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Haptics from 'expo-haptics';
 import api, { getImageUrl } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import { IconPackage, IconTrash, IconBookmark } from '@tabler/icons-react-native';
 
 export default function WatchlistScreen({ navigation }) {
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
-      fetchWatchlist();
+      fetchWatchlist(1);
     }, [])
   );
 
-  async function fetchWatchlist() {
+  async function fetchWatchlist(pageNum = 1, isRefresh = false) {
+    if (pageNum === 1) {
+      if (!isRefresh) setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+
     try {
-      const response = await api.get('/watchlist');
-      setListings(response.data.data || response.data);
+      const response = await api.get('/watchlist', { params: { page: pageNum } });
+      const responseData = response.data;
+      const newItems = responseData.data || (Array.isArray(responseData) ? responseData : []);
+      const currentPage = responseData.current_page || pageNum;
+      const lastPage = responseData.last_page || (newItems.length < 15 ? currentPage : currentPage + 1);
+
+      if (pageNum === 1) {
+        setListings(newItems);
+      } else {
+        setListings(prev => {
+          const existingIds = new Set(prev.map(item => item.id));
+          const filtered = newItems.filter(item => !existingIds.has(item.id));
+          return [...prev, ...filtered];
+        });
+      }
+
+      setPage(currentPage);
+      setHasMore(currentPage < lastPage);
     } catch (error) {
       console.log('Error fetching watchlist:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
+    }
+  }
+
+  function handleLoadMore() {
+    if (!loading && !loadingMore && hasMore) {
+      fetchWatchlist(page + 1);
     }
   }
 
   async function removeFromWatchlist(listingId) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await api.delete(`/watchlist/${listingId}`);
       setListings(prev => prev.filter(item => item.id !== listingId));
+      showToast('Removed from Watchlist', 'info');
     } catch (error) {
-      Alert.alert('Error', 'Could not remove listing.');
+      showToast('Could not remove listing.', 'error');
     }
   }
 
@@ -90,7 +127,18 @@ export default function WatchlistScreen({ navigation }) {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
           numColumns={2}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchWatchlist(); }} colors={[colors.primary]} />}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={{ paddingVertical: 20, alignItems: 'center', width: '100%' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null
+          }
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchWatchlist(1, true); }} colors={[colors.primary]} />
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <IconBookmark size={48} color={colors.subTextLight} style={{ marginBottom: 12 }} />

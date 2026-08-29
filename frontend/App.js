@@ -10,12 +10,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet, Platform, AppState } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import api from './src/services/api';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { ToastProvider } from './src/context/ToastContext';
 import { registerForPushNotifications } from './src/services/notificationService';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import RegisterScreen from './src/screens/auth/RegisterScreen';
@@ -24,6 +25,8 @@ import ListingDetailScreen from './src/screens/ListingDetailScreen';
 import CreateListingScreen from './src/screens/CreateListingScreen';
 import ConversationScreen from './src/screens/ConversationScreen';
 import ConversationsScreen from './src/screens/ConversationsScreen';
+import SellerProfileScreen from './src/screens/SellerProfileScreen';
+import ActivityHubScreen from './src/screens/ActivityHubScreen';
 import { IconHome, IconBookmark, IconPlus, IconMessage, IconUser } from '@tabler/icons-react-native';
 
 const Stack = createNativeStackNavigator();
@@ -67,18 +70,43 @@ function SellButton({ onPress }) {
 
 function MainTabs() {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const bottomInset = Platform.OS === 'android' ? Math.max(insets.bottom, 10) : insets.bottom;
   const [pendingOffersCount, setPendingOffersCount] = useState(0);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+  const appState = useRef(AppState.currentState);
 
   useEffect(() => {
+    if (!user) return;
+
     fetchCounts();
-    const interval = setInterval(fetchCounts, 4000);
-    return () => clearInterval(interval);
-  }, []);
+
+    let interval = setInterval(fetchCounts, 15000);
+
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        fetchCounts();
+        if (!interval) {
+          interval = setInterval(fetchCounts, 15000);
+        }
+      } else if (nextAppState.match(/inactive|background/)) {
+        if (interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      if (interval) clearInterval(interval);
+      subscription.remove();
+    };
+  }, [user]);
 
   async function fetchCounts() {
+    if (!user) return;
     try {
       const [offersRes, unreadRes] = await Promise.all([
         api.get('/my-offers'),
@@ -196,16 +224,32 @@ function AppNavigator() {
     );
   }
 
+  const headerOptions = {
+    headerShown: true,
+    headerBackButtonDisplayMode: 'minimal',
+    headerBackTitleVisible: false,
+    headerBackTitle: ' ',
+    headerStyle: { backgroundColor: colors.primary },
+    headerTintColor: '#fff',
+  };
+
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        headerBackButtonDisplayMode: 'minimal',
+        headerBackTitleVisible: false,
+        headerBackTitle: ' ',
+      }}
+    >
       {user ? (
         <>
           <Stack.Screen name="MainTabs" component={MainTabs} />
           <Stack.Screen name="ListingDetail" component={ListingDetailScreen}
-            options={{ headerShown: true, title: 'Listing Details', headerBackTitleVisible: false, headerBackTitle: '', headerStyle: { backgroundColor: colors.primary }, headerTintColor: '#fff' }}
+            options={{ ...headerOptions, title: 'Listing Details' }}
           />
           <Stack.Screen name="CreateListing" component={CreateListingScreen}
-            options={{ headerShown: true, title: 'Post a Listing', headerBackTitleVisible: false, headerBackTitle: '', headerStyle: { backgroundColor: colors.primary }, headerTintColor: '#fff' }}
+            options={{ ...headerOptions, title: 'Post a Listing' }}
           />
           <Stack.Screen name="Conversations" component={ConversationsScreen}
             options={{ headerShown: false }}
@@ -220,22 +264,28 @@ function AppNavigator() {
             options={{ headerShown: false }}
           />
           <Stack.Screen name="EditListing" component={EditListingScreen}
-            options={{ headerShown: true, title: 'Edit Listing', headerBackTitleVisible: false, headerBackTitle: '', headerStyle: { backgroundColor: colors.primary }, headerTintColor: '#fff' }}
+            options={{ ...headerOptions, title: 'Edit Listing' }}
           />
           <Stack.Screen name="MyListings" component={MyListingsScreen}
-            options={{ headerShown: true, title: 'My Listings', headerBackTitleVisible: false, headerBackTitle: '', headerStyle: { backgroundColor: colors.primary }, headerTintColor: '#fff' }}
+            options={{ ...headerOptions, title: 'My Listings' }}
           />
           <Stack.Screen name="PriceOffers" component={PriceOffersScreen}
-            options={{ headerShown: true, title: 'Price Offers', headerBackTitleVisible: false, headerBackTitle: '', headerStyle: { backgroundColor: colors.primary }, headerTintColor: '#fff' }}
+            options={{ ...headerOptions, title: 'Price Offers' }}
           />
           <Stack.Screen name="PaymentHistory" component={PaymentHistoryScreen}
-            options={{ headerShown: true, title: 'Payment & Escrow History', headerBackTitleVisible: false, headerBackTitle: '', headerStyle: { backgroundColor: colors.primary }, headerTintColor: '#fff' }}
+            options={{ ...headerOptions, title: 'Payment & Escrow History' }}
           />
           <Stack.Screen name="Appointments" component={AppointmentsScreen}
-            options={{ headerShown: true, title: 'Service Appointments', headerBackTitleVisible: false, headerBackTitle: '', headerStyle: { backgroundColor: colors.primary }, headerTintColor: '#fff' }}
+            options={{ ...headerOptions, title: 'Service Appointments' }}
           />
           <Stack.Screen name="SavedSearches" component={SavedSearchesScreen}
-            options={{ headerShown: true, title: 'Search Alerts', headerBackTitleVisible: false, headerBackTitle: '', headerStyle: { backgroundColor: colors.primary }, headerTintColor: '#fff' }}
+            options={{ ...headerOptions, title: 'Search Alerts' }}
+          />
+          <Stack.Screen name="SellerProfile" component={SellerProfileScreen}
+            options={{ ...headerOptions, title: 'Seller Profile' }}
+          />
+          <Stack.Screen name="ActivityHub" component={ActivityHubScreen}
+            options={{ ...headerOptions, title: 'Orders & Activity Hub' }}
           />
         </>
       ) : (
@@ -253,9 +303,11 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <ThemeProvider>
-          <NavigationContainer>
-            <AppNavigator />
-          </NavigationContainer>
+          <ToastProvider>
+            <NavigationContainer>
+              <AppNavigator />
+            </NavigationContainer>
+          </ToastProvider>
         </ThemeProvider>
       </AuthProvider>
     </SafeAreaProvider>

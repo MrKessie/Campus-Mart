@@ -76,6 +76,10 @@ class AuthController extends Controller {
         return response()->json($this->formatUser($request->user()));
     }
 
+    public function showUser(User $user) {
+        return response()->json($this->formatUser($user));
+    }
+
     public function updateProfile(Request $request) {
         $user = $request->user();
 

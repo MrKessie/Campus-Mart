@@ -147,6 +147,7 @@ export default function ProfileScreen({ navigation }) {
       <View style={styles.menuSection}>
         <Text style={[styles.menuSectionTitle, { color: colors.subText }]}>ACCOUNT DASHBOARD</Text>
 
+        {/* My Listings */}
         <TouchableOpacity
           style={[styles.menuItem, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
           onPress={() => navigation.navigate('MyListings')}
@@ -163,61 +164,33 @@ export default function ProfileScreen({ navigation }) {
           <IconChevronRight size={20} color={colors.subTextLight} />
         </TouchableOpacity>
 
+        {/* Orders & Activity Hub (Consolidated) */}
         <TouchableOpacity
           style={[styles.menuItem, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
-          onPress={() => navigation.navigate('PriceOffers')}
-        >
-          <View style={styles.menuLeft}>
-            <View style={[styles.iconCircle, { backgroundColor: '#fff3e0' }]}>
-              <IconTag size={20} color="#e65100" />
-            </View>
-            <View>
-              <Text style={[styles.menuTitle, { color: colors.text }]}>Price Offers</Text>
-              <Text style={[styles.menuSub, { color: colors.subTextLight }]}>
-                {stats.pendingOffersCount > 0 ? `${stats.pendingOffersCount} pending offers` : 'Sent & received offers'}
-              </Text>
-            </View>
-          </View>
-          {stats.pendingOffersCount > 0 && (
-            <View style={styles.menuBadge}>
-              <Text style={styles.menuBadgeText}>{stats.pendingOffersCount}</Text>
-            </View>
-          )}
-          <IconChevronRight size={20} color={colors.subTextLight} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.menuItem, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
-          onPress={() => navigation.navigate('PaymentHistory')}
+          onPress={() => navigation.navigate('ActivityHub')}
         >
           <View style={styles.menuLeft}>
             <View style={[styles.iconCircle, { backgroundColor: '#e8f5e9' }]}>
-              <IconShieldCheck size={20} color="#2e7d32" />
+              <IconShieldCheck size={20} color="#059669" />
             </View>
-            <View>
-              <Text style={[styles.menuTitle, { color: colors.text }]}>Payment & Escrow History</Text>
-              <Text style={[styles.menuSub, { color: colors.subTextLight }]}>{stats.escrowsCount} transactions</Text>
-            </View>
-          </View>
-          <IconChevronRight size={20} color={colors.subTextLight} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.menuItem, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
-          onPress={() => navigation.navigate('Appointments')}
-        >
-          <View style={styles.menuLeft}>
-            <View style={[styles.iconCircle, { backgroundColor: '#e3f2fd' }]}>
-              <IconCalendarEvent size={20} color="#1565c0" />
-            </View>
-            <View>
-              <Text style={[styles.menuTitle, { color: colors.text }]}>Service Appointments</Text>
-              <Text style={[styles.menuSub, { color: colors.subTextLight }]}>{stats.appointmentsCount} bookings</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.menuTitle, { color: colors.text }]}>Orders & Activity Hub</Text>
+              <Text style={[styles.menuSub, { color: colors.subTextLight }]} numberOfLines={1}>
+                Offers, Escrow & Bookings
+              </Text>
             </View>
           </View>
-          <IconChevronRight size={20} color={colors.subTextLight} />
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {stats.pendingOffersCount > 0 && (
+              <View style={styles.menuBadge}>
+                <Text style={styles.menuBadgeText}>{stats.pendingOffersCount}</Text>
+              </View>
+            )}
+            <IconChevronRight size={20} color={colors.subTextLight} />
+          </View>
         </TouchableOpacity>
 
+        {/* Search Alerts */}
         <TouchableOpacity
           style={[styles.menuItem, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
           onPress={() => navigation.navigate('SavedSearches')}

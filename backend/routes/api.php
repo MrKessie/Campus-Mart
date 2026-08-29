@@ -20,6 +20,7 @@ Route::post('/login',          [AuthController::class, 'login']);
 Route::get('/categories',      [CategoryController::class, 'index']);
 Route::get('/listings',        [ListingController::class, 'index']);
 Route::get('/listings/{listing}', [ListingController::class, 'show']);
+Route::get('/users/{user}',       [AuthController::class, 'showUser']);
 Route::get('/users/{user}/ratings', [RatingController::class, 'sellerRatings']);
 
 Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
@@ -29,8 +30,12 @@ Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
 Route::post('/email/resend', [AuthController::class, 'resendVerification'])
     ->middleware(['throttle:6,1']);
 
+use Illuminate\Support\Facades\Broadcast;
+
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
+
+    Broadcast::routes();
 
     Route::post('/logout',      [AuthController::class, 'logout']);
     Route::get('/me',           [AuthController::class, 'me']);

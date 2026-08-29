@@ -38,8 +38,13 @@ export async function registerForPushNotifications() {
     });
   }
 
-  const token = (await Notifications.getExpoPushTokenAsync()).data;
-  return token;
+  try {
+    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    return token;
+  } catch (e) {
+    console.log('Push token registration skipped (Expo Go limitation):', e.message);
+    return null;
+  }
 }
 
 export async function sendLocalNotification(title, body) {

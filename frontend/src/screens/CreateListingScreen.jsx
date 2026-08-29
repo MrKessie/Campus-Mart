@@ -4,8 +4,10 @@ import {
   Alert, ActivityIndicator, ScrollView, Image
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Haptics from 'expo-haptics';
 import api from '../services/api';
 import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import {
   IconCamera, IconBook, IconDeviceMobile, IconShirt,
   IconSoup, IconArmchair, IconPencil, IconSchool,
@@ -29,6 +31,7 @@ const CATEGORY_ICON_MAP = {
 
 export default function CreateListingScreen({ navigation }) {
   const { colors } = useTheme();
+  const { showToast } = useToast();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
@@ -74,19 +77,19 @@ export default function CreateListingScreen({ navigation }) {
   }
 
   async function handleSubmit() {
-    if (!title || !description || !price || !categoryId) {
-      Alert.alert('Error', 'Please fill in all required fields.');
+    if (!title.trim() || !description.trim() || !price || !categoryId) {
+      showToast('Please fill in all required fields.', 'warning');
       return;
     }
     if (images.length === 0) {
-      Alert.alert('Error', 'Please select at least 1 image.');
+      showToast('Please select at least 1 photo.', 'warning');
       return;
     }
     setLoading(true);
     try {
       const formData = new FormData();
-      formData.append('title', title);
-      formData.append('description', description);
+      formData.append('title', title.trim());
+      formData.append('description', description.trim());
       formData.append('price', price);
       formData.append('category_id', categoryId);
       if (courseCode.trim()) {
@@ -111,11 +114,10 @@ export default function CreateListingScreen({ navigation }) {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      Alert.alert('Success', 'Listing created successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
+      showToast('Listing posted successfully! 🎉', 'success');
+      navigation.goBack();
     } catch (error) {
-      Alert.alert('Error', error.response?.data?.message || 'Could not create listing.');
+      showToast(error.response?.data?.message || 'Could not create listing.', 'error');
     } finally {
       setLoading(false);
     }

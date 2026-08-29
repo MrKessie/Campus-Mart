@@ -20,6 +20,10 @@ class ListingController extends Controller {
             $query->where('category_id', $request->category_id);
         }
 
+        if ($request->filled('user_id')) {
+            $query->where('user_id', $request->user_id);
+        }
+
         if ($request->filled('min_price')) {
             $query->where('price', '>=', $request->min_price);
         }

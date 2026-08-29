@@ -7,6 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { getEcho } from '../services/echo';
 import { IconMessageOff, IconShieldCheck } from '@tabler/icons-react-native';
 
 export default function ConversationsScreen({ navigation }) {
@@ -21,6 +22,30 @@ export default function ConversationsScreen({ navigation }) {
       fetchConversations();
     }, [])
   );
+
+  useEffect(() => {
+    if (!conversations.length) return;
+    try {
+      const echo = getEcho();
+      conversations.forEach((conv) => {
+        echo.private(`conversation.${conv.id}`).listen('.MessageSent', (e) => {
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === conv.id
+                ? {
+                    ...c,
+                    latest_message: e.message,
+                    unread_count: e.message.sender_id !== user?.id ? (c.unread_count || 0) + 1 : c.unread_count,
+                  }
+                : c
+            )
+          );
+        });
+      });
+    } catch (e) {
+      console.log('Echo conversations error:', e);
+    }
+  }, [conversations.length]);
 
   async function fetchConversations() {
     try {

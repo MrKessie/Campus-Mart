@@ -4,49 +4,87 @@ import {
   Image, ActivityIndicator, Alert, RefreshControl
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Haptics from 'expo-haptics';
 import api, { getImageUrl } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useToast } from '../context/ToastContext';
 import {
   IconBox, IconPencil, IconTrash, IconPlus,
   IconCheck, IconX, IconTag
 } from '@tabler/icons-react-native';
 
 export default function MyListingsScreen({ navigation }) {
+  const { colors } = useTheme();
+  const { showToast } = useToast();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const { colors } = useTheme();
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
-      fetchMyListings();
+      fetchMyListings(1);
     }, [])
   );
 
-  async function fetchMyListings() {
+  async function fetchMyListings(pageNum = 1, isRefresh = false) {
+    if (pageNum === 1) {
+      if (!isRefresh) setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+
     try {
-      const response = await api.get('/my-listings');
-      setListings(response.data.data || response.data || []);
+      const response = await api.get('/my-listings', { params: { page: pageNum } });
+      const responseData = response.data;
+      const newItems = responseData.data || (Array.isArray(responseData) ? responseData : []);
+      const currentPage = responseData.current_page || pageNum;
+      const lastPage = responseData.last_page || (newItems.length < 15 ? currentPage : currentPage + 1);
+
+      if (pageNum === 1) {
+        setListings(newItems);
+      } else {
+        setListings(prev => {
+          const existingIds = new Set(prev.map(item => item.id));
+          const filtered = newItems.filter(item => !existingIds.has(item.id));
+          return [...prev, ...filtered];
+        });
+      }
+
+      setPage(currentPage);
+      setHasMore(currentPage < lastPage);
     } catch (error) {
       console.log('Error fetching my listings:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
+    }
+  }
+
+  function handleLoadMore() {
+    if (!loading && !loadingMore && hasMore) {
+      fetchMyListings(page + 1);
     }
   }
 
   function onRefresh() {
     setRefreshing(true);
-    fetchMyListings();
+    fetchMyListings(1, true);
   }
 
   async function toggleStatus(listing) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await api.post(`/listings/${listing.id}/toggle-status`);
-      fetchMyListings();
+      const newStatus = listing.status === 'available' ? 'SOLD' : 'AVAILABLE';
+      showToast(`Listing marked as ${newStatus}!`, 'success');
+      fetchMyListings(1);
     } catch (error) {
-      Alert.alert('Error', 'Could not update listing status.');
+      showToast('Could not update listing status.', 'error');
     }
   }
 
@@ -56,11 +94,13 @@ export default function MyListingsScreen({ navigation }) {
       {
         text: 'Delete', style: 'destructive',
         onPress: async () => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           try {
             await api.delete(`/listings/${id}`);
-            fetchMyListings();
+            showToast('Listing deleted', 'info');
+            fetchMyListings(1);
           } catch (error) {
-            Alert.alert('Error', 'Could not delete listing.');
+            showToast('Could not delete listing.', 'error');
           }
         }
       }
@@ -163,6 +203,15 @@ export default function MyListingsScreen({ navigation }) {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderListingItem}
           contentContainerStyle={styles.listContainer}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={{ paddingVertical: 20, alignItems: 'center', width: '100%' }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null
+          }
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
           }
